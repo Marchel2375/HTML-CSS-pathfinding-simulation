@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://unpkg.com/konva@4.0.18/konva.min.js"></script>
+    <meta charset="utf-8" />
+    <title>A* Representation</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        background-color: #f0f0f0;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <button onclick ="Create_Node()"> Create Node </button>
+      <button onclick ="Edit()"> Edit </button> <!--option 0-->
+      <button onclick = "AllowDrawLine()"> Draw Line </button> <!--option 1-->
+      <button onclick = "AllowHeuristicLine()"> Set Heuristic </button> <!--option 3-->
+      <button onclick = "AllowDelete()"> Delete </button> <!--option 2-->
+      <select id="Search Choice">
+        <option value=1>A*</option>
+        <option value=2>UCS</option>
+        <option value=3>Greedy</option>
+      </select>
+      <button onclick = "SearchPath()"> Search </button> <!--option 4-->
+      <button onclick = "test()"> test </button>
+    </div>
+    <div id="container"></div>
+    <script>
+//-----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    //init
+
+      var width = window.innerWidth;
+      var height = window.innerHeight;
+
+      var stage = new Konva.Stage({
+        container: 'container',
+        width: width,
+        height: height
+      });
+      var delay = 500;
+      var layer = new Konva.Layer();
+      var nodes =[];
+      var n_nodes = 0;
+      var option = 0; // 1: create line ; 2: delete 3: heuristic
+      var showline = 0 // 0: edge; 1: heuristic
+      var SearchOption = 1;
+      var AllowChanges = true;
+
+      var nodeTemp = new Konva.Circle();
+      var startfilled = 0;
+      stage.add(layer);
+//---------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    // UI
+
+      function sleep(milliseconds) {
+        var start = new Date().getTime();
+        for (var end = start; end-start <milliseconds ; end= new Date().getTime()) {
+            layer.draw();
+        }
+      }
+
+      function ReduceAllOpacity(num){
+        for(var i=0; i<n_nodes; i++){
+          if(nodes[i]!= null){
+            nodes[i].shape.opacity(num);
+          }
+        }
+      }
+
+      function CreateObjectNode(shape){
+        if(option!= 0){
+          Edit();
+        }
+        var node = new Object();
+        node.shape = shape;
+        node.edge =[];
+        node.heuristic = [];
+        return node;
+      }
+      function CreateObjectEdge(line, cost, text){
+        var edge = new Object();
+        edge.line = line;
+        edge.cost = cost;
+        edge.text = text;
+        return edge;
+      }
+
+      function HideEdge(){
+        for (var i = 0 ; i<n_nodes;i++){
+          for(var j=0 ; j<nodes[i].edge.length;j++){
+            if(nodes[i].edge[j]!=null){
+              nodes[i].edge[j].line.hide();
+              nodes[i].edge[j].text.hide();
+            }
+          }
+        }
+      }
+
+      function ShowEdge(){
+        for (var i = 0 ; i<n_nodes;i++){
+          for(var j=0 ; j<nodes[i].edge.length;j++){
+            if(nodes[i].edge[j]!=null){
+              nodes[i].edge[j].line.show();
+              nodes[i].edge[j].text.show();
+            }
+          }
+        }
+      }
+
+      function HideHeuristic(){
+        for (var i = 0 ; i<n_nodes;i++){
+          for(var j=0 ; j<nodes[i].heuristic.length;j++){
+            if(nodes[i].heuristic[j]!=null){
+              nodes[i].heuristic[j].line.hide();
+              nodes[i].heuristic[j].text.hide();
+            }
+          }
+        }
+      }
+
+      function ShowHeuristic(){
+        for (var i = 0 ; i<n_nodes;i++){
+          for(var j=0 ; j<nodes[i].heuristic.length;j++){
+            if(nodes[i].heuristic[j]!=null){
+              nodes[i].heuristic[j].line.show();
+              nodes[i].heuristic[j].text.show();
+            }
+          }
+        }
+      }
+
+      function ShowHide(){
+        if (showline == 0){
+          ShowEdge();
+          HideHeuristic();
+        }
+        else if(showline == 1){
+          ShowHeuristic();
+          HideEdge();
+        }
+        layer.draw();
+      }
+//----------------------------------------------------------------
+
+	//nodes
+
+      function Create_Node(){
+        console.log("hello world");
+        ShowHide();
+        var rectX = stage.width() / 2 - 50;
+      	var rectY = stage.height() / 2 - 25;
+        var temp = new Konva.Circle({
+          x: (rectX+(n_nodes*10)),
+          y: (rectY+(n_nodes*10)),
+          width: 100,
+          fill: '#00D2FF',
+          stroke: 'black',
+          strokeWidth: 4,
+          draggable: true,
+          id: n_nodes
+        });
+        var node = CreateObjectNode(temp,n_nodes)
+        nodes[n_nodes]=node;
+
+        // add cursor styling
+        node.shape.on('mouseover', function() {
+          document.body.style.cursor = 'pointer';
+        });
+        node.shape.on('mouseout', function() {
+          document.body.style.cursor = 'default';
+        });
+
+        node.shape.on('click touchstart',function(){
+          if(option  == 1){
+            if(startfilled == 0){
+              nodeTemp = this;
+              startfilled = 1;
+              this.opacity(1);
+            }
+            else{
+              var costs = prompt("Please enter value", -1);
+              if(isNaN(costs)){
+                  alert("input integer");
+                  edit();
+              }
+              else{
+                cost=parseInt(costs);
+                if(cost<0){
+                  alert("error");
+                  edit();
+                }
+                else if(cost != null){
+                  if(nodes[this.id()].edge[nodeTemp.id()] != null){
+                    DeleteE(this.id(), nodeTemp.id());
+                  }
+                  var text = CreateText(cost, this, nodeTemp);
+                  var line = drawline(this, nodeTemp);
+                  var edge = CreateObjectEdge(line,cost,text);
+                  nodes[this.id()].edge[nodeTemp.id()]=edge;
+                  nodes[nodeTemp.id()].edge[this.id()]=edge;
+                  startfilled = 0; 
+                }
+
+              }
+              Edit();
+            }
+          }
+          //----------------
+          if(option == 2){
+            DeleteN(this.id());
+            Edit();
+          }
+          //----------------
+          if(option  == 3){
+            if(startfilled == 0){
+              nodeTemp= this;
+              startfilled = 1;
+              this.opacity(1);
+            }
+            else{
+              var costs = prompt("Please enter value", -1);
+              if(isNaN(costs)){
+                alert("input integer");
+                edit();
+              }
+              else{
+                cost=parseInt(costs);
+                if(cost<0){
+                   alert("error");
+                   Edit();
+                }
+                else if(cost != null){
+                  if(nodes[this.id()].heuristic[nodeTemp.id()] != null){
+                    DeleteH(this.id(), nodeTemp.id());
+                  }
+                  var text = CreateText(cost, this, nodeTemp);
+                  var line = drawline(this, nodeTemp);
+                  var edge = CreateObjectEdge(line,cost,text);
+                  nodes[this.id()].heuristic[nodeTemp.id()]=edge;
+                  nodes[nodeTemp.id()].heuristic[this.id()]=edge;
+                  startfilled = 0; 
+                }
+              }
+              Edit();
+            }
+          }
+          if(option  == 4){
+            if(startfilled == 0){
+            nodeTemp= this;
+            startfilled = 1;
+            this.opacity(1);
+            }
+            else{
+              var temp = document.getElementById("Search Choice");
+              SearchOption = parseInt(temp.options[temp.selectedIndex].value);
+              console.log(SearchOption+1);
+              ReduceAllOpacity(1);
+              if(SearchOption == 1){
+                Search(nodeTemp.id(),this.id(),AstarPriority);
+              }
+              else if(SearchOption == 2){
+                Search(nodeTemp.id(),this.id(),UCS);
+              }
+              else if(SearchOption == 3){
+                Search(nodeTemp.id(),this.id(),Greedy);
+              }
+
+            }
+          }
+          layer.draw();
+        });
+
+
+        console.log("Node Created");
+        layer.add(node.shape);
+        layer.draw();
+        n_nodes++;
+      }
+//-------------------------------------------------------------------------------------------------
+	//lines
+
+      //update line if shape are moved
+      function updateLinePosition(line, nodes1, nodes2) {
+        let startX = nodes1.getX();
+        let startY = nodes1.getY();
+        let endX = nodes2.getX();
+        let endY = nodes2.getY();
+
+        line.points([startX, startY, endX, endY]);
+      }
+
+      function updateTextPosition(text, nodes1, nodes2){
+        text.x((nodes1.getX()+nodes2.getX())/2-30);
+        text.y((nodes1.getY()+nodes2.getY())/2-30);
+      }
+
+      //make line
+      function drawline(nodes1, nodes2){
+        var line = new Konva.Line({
+          stroke: 'black',
+          strokeWidth: 5,
+          lineCap: 'round',
+          lineJoin: 'round',
+          draggable: false
+        });
+
+        updateLinePosition(line, nodes1, nodes2);
+        layer.add(line);
+
+        nodes1.on('dragmove', () => {
+          updateLinePosition(line, nodes1, nodes2);
+        })
+        nodes2.on('dragmove', () => {
+          updateLinePosition(line, nodes1, nodes2);
+        })
+        line.on('click',function(){
+          if(option==2){
+            if(showline == 0){
+              DeleteE(nodes1.id(),nodes2.id());
+            }
+            else if(showline ==1){
+              DeleteH(nodes1.id(),nodes2.id());
+            }
+          }
+        })
+        console.log("Line Created");
+        return line;
+      }
+
+      function CreateText(value, nodes1, nodes2){
+        var text = new Konva.Text({
+          text: value,
+          fontSize: 20,
+          fill: 'blue'
+        });
+
+        updateTextPosition(text, nodes1,nodes2);
+        layer.add(text);
+        nodes1.on('dragmove',() =>{
+          updateTextPosition(text, nodes1,nodes2);
+        })
+        nodes2.on('dragmove',() =>{
+          updateTextPosition(text, nodes1,nodes2);
+        })
+        console.log("Text Created");
+        return text;
+      }
+//-------------------------------------------------------------------------------------------------
+	//delete
+
+      function DeleteE(n1,n2){
+        console.log("Delete Edge called");
+        nodes[n1].edge[n2].line.destroy();
+        nodes[n1].edge[n2].text.destroy();
+        nodes[n1].edge[n2]=null;
+        nodes[n2].edge[n1]=null;
+        stage.add(layer);
+      }  
+
+      function DeleteH(n1,n2){
+        console.log("Delete Edge called");
+        nodes[n1].heuristic[n2].line.destroy();
+        nodes[n1].heuristic[n2].text.destroy();
+        nodes[n1].heuristic[n2]=null;
+        nodes[n2].heuristic[n1]=null;
+        stage.add(layer);
+      } 
+
+      function DeleteN(n){
+        console.log("Delete Node called");
+        for(var i=0; i<nodes[n].edge.length;i++){
+          if(nodes[n].edge[i]!= null){
+            DeleteE(n,i);
+          }
+        }
+
+        nodes[n].shape.destroy();
+        nodes[n]= null
+        stage.add(layer);
+      }
+
+
+//-------------------------------------------------------------------------------------------------
+	//buttons functions
+
+	  //option 0
+      function Edit(){
+        if(AllowChanges == false){
+          return;
+        }
+        console.log("Edit called");
+        if(option!=0){
+          option=0;
+        }
+        startfilled = 0;
+        for (var i = n_nodes - 1; i >= 0; i--) {
+          if(nodes[i]!=null){
+            nodes[i].shape.draggable (true);
+            nodes[i].shape.opacity(1);
+            nodes[i].shape.fill('#00D2FF');
+          }
+        }
+        layer.draw();
+      }
+      //option 1
+      function AllowDrawLine(){
+        if(AllowChanges == false){
+          return;
+        }
+        console.log("Allow Draw Line called");
+        startfilled = 0;
+        Edit();
+        ReduceAllOpacity(0.5);
+        if(option!=1){
+          for (var i = n_nodes-1; i >= 0; i--) {
+          	if(nodes[i]!=null){
+           		nodes[i].shape.draggable (false);
+          	}
+          }
+          option=1;
+          showline = 0;
+          ShowHide();
+        }
+      }
+      //option 2
+      function AllowDelete(){
+        if(AllowChanges == false){
+          return;
+        }
+        startfilled = 0;
+        Edit();
+        if(option!=2){
+          for (var i = n_nodes - 1; i >= 0; i--) {
+           if(nodes[i]!=null){
+           		nodes[i].shape.draggable (false);
+          	}
+          }
+          option=2;
+        }
+      }
+      //option 3
+      function AllowHeuristicLine(){
+        if(AllowChanges == false){
+          return;
+        }
+        startfilled = 0;
+        Edit();
+        ReduceAllOpacity(0.5);
+        if(option!=3){
+          for (var i = n_nodes - 1; i >= 0; i--) {
+           if(nodes[i]!=null){
+           		nodes[i].shape.draggable (false);
+          	}
+          }
+          option=3;
+          showline = 1;
+          ShowHide();
+        }
+      }
+
+      //option 4
+      function SearchPath(){
+        if(AllowChanges == false){
+          return;
+        }
+      	console.log("Allow Search called");
+        startfilled = 0;
+        Edit();
+        ReduceAllOpacity(0.5);
+        if(option!=4){
+          for (var i = n_nodes - 1; i >= 0; i--) {
+           if(nodes[i]!=null){
+           		nodes[i].shape.draggable (false);
+          	}
+          }
+          option=4;
+          showline = 0;
+          ShowHide();
+        }
+      }
+
+
+
+      function test(){
+        if(AllowChanges == false){
+          return;
+        }
+        console.log('test called');
+        console.log(n_nodes);
+        for (var i = 0 ; i<n_nodes;i++){
+          for(var j=0 ; j<nodes[i].edge.length;j++){
+            if(nodes[i].edge[j]!=null){
+              console.log("test "+i+j+": " + nodes[i].edge[j].cost);
+            }
+          }
+        }
+        setTimeout(function(){
+          for(var i = 0; i<nodes.length;i++){
+            if(nodes[i]!= null){
+             nodes[i].shape.fill('#00D2FF');  
+            }
+          }
+        },800);
+        setTimeout(function(){
+          nodes[0].shape.fill('orange');
+          layer.draw();
+        },200);
+        setTimeout(function(){
+          nodes[0].shape.fill('yellow');
+          layer.draw();
+        },500);
+
+
+ 
+      }
+
+//----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+      // path finding logic
+
+      function NewNode(node, parent, actualcost,end){
+        var NewNode = new Object();
+        NewNode.node = node;
+        NewNode.parent = parent;
+        NewNode.actualcost = actualcost;
+        if(node.heuristic[end]!= null){
+          NewNode.heuristic = node.heuristic[end].cost;
+        }
+        else{
+          NewNode.heuristic = 0;
+        }
+        return NewNode;
+      }
+
+      function AstarPriority(element){
+        if(element.parent == null){
+          return 0;
+        }
+        var heuristic = parseInt(element.heuristic);
+        priority = parseInt(element.actualcost)+ heuristic;
+        return priority;
+      }
+
+      function Greedy(element){
+        return parseInt(element.heuristic);
+      }
+
+      function UCS(element){
+        return parseInt(element.actualcost);
+      }
+
+      function BinaryHeap(scoreFunction){
+        this.content = [];
+        this.scoreFunction = scoreFunction;
+      }
+
+      BinaryHeap.prototype = {
+        push: function(element) {
+          // Add the new element to the end of the array.
+          this.content.push(element);
+          // Allow it to bubble up.
+          this.bubbleUp(this.content.length - 1);
+        },
+
+        pop: function() {
+          // Store the first element so we can return it later.
+          var result = this.content[0];
+          // Get the element at the end of the array.
+          var end = this.content.pop();
+          // If there are any elements left, put the end element at the
+          // start, and let it sink down.
+          if (this.content.length > 0) {
+            this.content[0] = end;
+            this.sinkDown(0);
+          }
+          return result;
+        },
+
+        remove: function(node) {
+          var length = this.content.length;
+          // To remove a value, we must search through the array to find
+          // it.
+          for (var i = 0; i < length; i++) {
+            if (this.content[i] != node) continue;
+            // When it is found, the process seen in 'pop' is repeated
+            // to fill up the hole.
+            var end = this.content.pop();
+            // If the element we popped was the one we needed to remove,
+            // we're done.
+            if (i == length - 1) break;
+            // Otherwise, we replace the removed element with the popped
+            // one, and allow it to float up or sink down as appropriate.
+            this.content[i] = end;
+            this.bubbleUp(i);
+            this.sinkDown(i);
+            break;
+          }
+        },
+
+        size: function() {
+          return this.content.length;
+        },
+
+        bubbleUp: function(n) {
+          // Fetch the element that has to be moved.
+          var element = this.content[n], score = this.scoreFunction(element);
+          // When at 0, an element can not go up any further.
+          while (n > 0) {
+            // Compute the parent element's index, and fetch it.
+            var parentN = Math.floor((n + 1) / 2) - 1,
+            parent = this.content[parentN];
+            // If the parent has a lesser score, things are in order and we
+            // are done.
+            if (score >= this.scoreFunction(parent))
+              break;
+
+            // Otherwise, swap the parent with the current element and
+            // continue.
+            this.content[parentN] = element;
+            this.content[n] = parent;
+            n = parentN;
+          }
+        },
+
+        sinkDown: function(n) {
+            // Look up the target element and its score.
+            var length = this.content.length,
+            element = this.content[n],
+            elemScore = this.scoreFunction(element);
+
+            while(true) {
+              // Compute the indices of the child elements.
+              var child2N = (n + 1) * 2, child1N = child2N - 1;
+              // This is used to store the new position of the element,
+              // if any.
+              var swap = null;
+              // If the first child exists (is inside the array)...
+              if (child1N < length) {
+                // Look it up and compute its score.
+                var child1 = this.content[child1N],
+                child1Score = this.scoreFunction(child1);
+                // If the score is less than our element's, we need to swap.
+                if (child1Score < elemScore)
+                  swap = child1N;
+              }
+              // Do the same checks for the other child.
+              if (child2N < length) {
+                var child2 = this.content[child2N],
+                child2Score = this.scoreFunction(child2);
+                if (child2Score < (swap == null ? elemScore : child1Score))
+                  swap = child2N;
+              }
+
+              // No need to swap further, we are done.
+              if (swap == null) break;
+
+              // Otherwise, swap and continue.
+              this.content[n] = this.content[swap];
+              this.content[swap] = element;
+              n = swap;
+            }
+          }
+        };
+
+     	function NodeFill(element, color, time){
+        setTimeout(function(){
+     		 element.node.shape.fill(color);
+     		 layer.draw();
+        },time);
+     		return time+delay;
+     	}
+
+      function LineFill(element1, element2, color, time){
+        setTimeout(function(){
+         element1.node.edge[element2.node.shape.id()].line.stroke(color);
+         layer.draw();
+        },time);
+        return time+delay;
+      }
+
+      function ShowAHeuristic(element, end, time){
+        setTimeout(function(){
+          if(element.node.heuristic[end] != null){
+            HideEdge();
+            element.node.heuristic[end].line.show();
+            element.node.heuristic[end].text.show();
+          }
+          layer.draw();
+        }, time);
+        time+=delay;
+        setTimeout(function(){
+          ShowHide();
+          layer.draw();
+        },time);
+        return time+delay;
+      }
+
+
+    //pseudocode
+       function Search(start, end, type){
+
+        var NodeExpanded = 0;
+        var NodeVisited = 0;
+        var FinalCost = 0;
+        var PathFound = false;
+
+        AllowChanges = false;
+       	
+        console.log('start');
+
+        var time= 0;
+
+        showline = 0;
+        ShowHide();
+
+       	var priority = new BinaryHeap(type);
+       	var visited = []
+       	for(var i=0; i< n_nodes; i++){
+       		visited[i] = 0;
+       	}
+       	temp = nodes[start]
+       	var FirstNode = NewNode(temp, null, 0, end);
+       	priority.push(FirstNode);
+        NodeExpanded++;
+
+       	while(priority.size() > 0){
+       		var curr = priority.pop();
+       		if(visited[curr.node.shape.id()] == 0){
+       			visited[curr.node.shape.id()] = 1;
+            	NodeVisited++;
+       			time = NodeFill(curr,'yellow', time);
+            	//if curr is the destination node
+	       		if(curr.node.shape.id() == end){
+	       			FinalCost = curr.actualcost;
+	       			while(curr.parent !=null ){
+	                	time= NodeFill(curr,'green',time);
+	                	curr=curr.parent;
+	              	}
+	              	time=NodeFill(curr,'green',time);
+	              	PathFound=true;
+	       			break;
+	       		}
+
+	       		for(var i =0; i< n_nodes; i++){
+	       			if(curr.node.edge[i] != null){
+	       				var actualcost = curr.actualcost+curr.node.edge[i].cost;
+                console.log('actualcost: '+actualcost);
+	       				var AdjNode = NewNode(nodes[i],curr,actualcost,end);
+	       				priority.push(AdjNode);
+                NodeExpanded++;
+
+                //changing color logic
+                LineFill(curr,AdjNode,'red',time);
+                time = NodeFill(AdjNode,'orange', time);
+                //node color changes based on if the node have been visited or not
+                if(visited[i] == 0){
+                  if(SearchOption == 1 || SearchOption == 3){
+                    time = ShowAHeuristic(AdjNode, end, time);
+                  }
+                  LineFill(curr,AdjNode,'black',time);
+                  time = NodeFill(AdjNode,'#00D2FF',time); //blue not visited
+                }
+                else{
+                  LineFill(curr,AdjNode,'black',time);
+                  time =  NodeFill(AdjNode,'red',time); //visited is red
+                }
+	       			}
+	       		}
+            	time =  NodeFill(curr,'red',time);
+       		}
+       	}
+
+        //clear up priority que
+        while(priority.size()>0){
+          priority.pop();
+        }
+
+        setTimeout(function(){
+          if(PathFound){
+            alert("NodeExpanded: " + NodeExpanded + " NodeVisited: "+ NodeVisited+" Total Cost: "+FinalCost);
+          }
+          else{
+            alert("Path Not Found");
+          }
+            AllowChanges  = true;
+          Edit();
+        },time)
+        //return color back to normal
+       }
+
+    /*push startNode onto openList
+    while(openList is not empty) {
+     currentNode = find lowest f in openList
+     if currentNode is final, return the successful path
+     push currentNode onto closedList and remove from openList
+     foreach neighbor of currentNode {
+         if neighbor is not in openList {
+                save g, h, and f then save the current parent
+                add neighbor to openList
+         }
+     }*/
+
+      
+    </script>
+  </body>
+
+<!--
+
+THE END
+
+∧__∧
+（｀•ω• )づ__∧
+（つ　 /( •ω•。)
+しーＪ (nnノ) pat pat
+_♥__♥_____♥__♥___ 
+_♥_____♥_♥_____♥__
+_♥______♥______♥__ 
+__♥_____/______♥__ 
+___♥____\_____♥___ 
+____♥___/___♥_____ 
+______♥_\_♥_______ 
+________♥_________
+
+!-->
+</html>
